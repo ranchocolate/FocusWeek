@@ -3,195 +3,71 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FocusWeek - Deep Work To-Do</title>
+  <title>FocusWeek - Deep Work Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .completed {
-      text-decoration: line-through;
-      opacity: 0.5;
-    }
+    .completed { text-decoration: line-through; opacity: 0.5; }
+    .transition-slide { transition: transform 400ms ease; }
+    .modal { backdrop-filter: blur(3px); }
   </style>
 </head>
-<body class="min-h-screen flex flex-col items-center p-4">
-  
+<body class="min-h-screen flex flex-col items-center p-4 overflow-x-hidden">
+
   <!-- Header -->
-  <div class="w-full max-w-4xl flex justify-between items-center mb-4">
+  <div class="w-full max-w-6xl flex justify-between items-center mb-4">
     <h1 class="text-2xl font-bold">FocusWeek</h1>
-    <button id="toggleTheme" class="bg-gray-200 dark:bg-gray-700 p-2 rounded">Toggle Theme</button>
+    <div class="flex items-center gap-2">
+      <input id="searchInput" type="text" placeholder="Search tasks/tags..." class="p-2 border rounded" />
+      <button id="settingsBtn" class="bg-gray-200 dark:bg-gray-700 p-2 rounded">⚙️</button>
+      <button id="toggleTheme" class="bg-gray-200 dark:bg-gray-700 p-2 rounded">🌓</button>
+    </div>
   </div>
 
   <!-- Week Navigation -->
-  <div class="w-full max-w-4xl flex justify-between items-center mb-4">
-    <button id="prevWeek" class="px-3 py-1 bg-blue-500 text-white rounded">← Previous</button>
-    <div id="weekDisplay" class="font-semibold">Week of <span id="currentWeek"></span></div>
-    <button id="nextWeek" class="px-3 py-1 bg-blue-500 text-white rounded">Next →</button>
+  <div class="w-full max-w-6xl flex justify-between items-center mb-4">
+    <button id="prevWeeks" class="px-3 py-1 bg-blue-500 text-white rounded">← Previous</button>
+    <div id="weekRange" class="font-semibold">Weeks starting <span id="currentWeekStart"></span></div>
+    <button id="nextWeeks" class="px-3 py-1 bg-blue-500 text-white rounded">Next →</button>
   </div>
 
-  <!-- Days Layout -->
-  <div id="daysContainer" class="w-full max-w-4xl grid grid-cols-1 md:grid-cols-5 gap-4"></div>
+  <!-- Week Container -->
+  <div id="weeksWrapper" class="w-full max-w-6xl overflow-hidden relative">
+    <div id="weeksContainer" class="flex transition-slide"></div>
+  </div>
 
   <!-- Tag Management -->
-  <div class="w-full max-w-4xl mt-8">
+  <div class="w-full max-w-6xl mt-8">
     <h2 class="text-lg font-semibold mb-2">Manage Tags</h2>
     <div id="tagList" class="flex flex-wrap gap-2 mb-2"></div>
     <input id="newTagInput" type="text" placeholder="Add new tag" class="border p-2 mr-2">
     <button id="addTagBtn" class="px-3 py-1 bg-green-500 text-white rounded">Add Tag</button>
   </div>
 
-  <script>
-    const defaultTags = ["Deep Work", "Maintenance", "Admin", "Growth", "Strategy"];
-    let tags = JSON.parse(localStorage.getItem('tags')) || [...defaultTags];
-    let currentWeekOffset = 0;
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center modal">
+    <div class="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-80">
+      <h2 class="text-xl font-bold mb-4">Settings</h2>
 
-    const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+      <div class="mb-4">
+        <label class="block mb-2">Default Tasks Per Day:</label>
+        <input id="defaultSlotsInput" type="number" min="1" max="10" class="border p-2 w-full" />
+      </div>
 
-    function startOfWeek(date) {
-      const d = new Date(date);
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
-      return new Date(d.setDate(diff));
-    }
+      <div class="mb-4">
+        <h3 class="font-semibold mb-2">Reset Options:</h3>
+        <label class="flex items-center mb-1"><input type="checkbox" id="resetTasks" checked class="mr-2">Tasks</label>
+        <label class="flex items-center mb-1"><input type="checkbox" id="resetTags" checked class="mr-2">Tags</label>
+        <label class="flex items-center"><input type="checkbox" id="resetWeeks" checked class="mr-2">Weeks</label>
+      </div>
 
-    function getWeekString(offset) {
-      const today = new Date();
-      const first = startOfWeek(new Date(today.setDate(today.getDate() + offset * 7)));
-      return first.toLocaleDateString();
-    }
+      <div class="flex justify-between">
+        <button id="applySettingsBtn" class="px-3 py-1 bg-blue-500 text-white rounded">Apply</button>
+        <button id="closeSettingsBtn" class="px-3 py-1 bg-gray-400 rounded">Cancel</button>
+        <button id="resetBtn" class="px-3 py-1 bg-red-500 text-white rounded">Reset</button>
+      </div>
+    </div>
+  </div>
 
-    function saveData() {
-      localStorage.setItem('tasks', JSON.stringify(tasks));
-      localStorage.setItem('tags', JSON.stringify(tags));
-    }
-
-    function loadTasks() {
-      return JSON.parse(localStorage.getItem('tasks')) || {};
-    }
-
-    let tasks = loadTasks();
-
-    function renderTags() {
-      const tagList = document.getElementById('tagList');
-      tagList.innerHTML = '';
-      tags.forEach(tag => {
-        const tagEl = document.createElement('span');
-        tagEl.textContent = tag;
-        tagEl.className = 'bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-2 py-1 rounded cursor-pointer';
-        tagEl.onclick = () => {
-          tags = tags.filter(t => t !== tag);
-          saveData();
-          renderTags();
-        };
-        tagList.appendChild(tagEl);
-      });
-    }
-
-    function renderWeek() {
-      document.getElementById('currentWeek').textContent = getWeekString(currentWeekOffset);
-      const container = document.getElementById('daysContainer');
-      container.innerHTML = '';
-
-      daysOfWeek.forEach(day => {
-        const dayKey = `${getWeekString(currentWeekOffset)}-${day}`;
-        const dayTasks = tasks[dayKey] || [];
-
-        const dayDiv = document.createElement('div');
-        dayDiv.className = 'border rounded-lg p-2 flex flex-col';
-
-        const dayTitle = document.createElement('h3');
-        dayTitle.textContent = day;
-        dayTitle.className = 'font-bold mb-2';
-        dayDiv.appendChild(dayTitle);
-
-        const taskList = document.createElement('div');
-        dayTasks.forEach((task, idx) => {
-          const taskEl = createTaskElement(dayKey, idx, task);
-          taskList.appendChild(taskEl);
-        });
-        dayDiv.appendChild(taskList);
-
-        const addBtn = document.createElement('button');
-        addBtn.textContent = '+ Add Task';
-        addBtn.className = 'mt-2 text-blue-500 hover:underline';
-        addBtn.onclick = () => {
-          const newTask = { text: '', tags: [], completed: false };
-          tasks[dayKey] = tasks[dayKey] || [];
-          tasks[dayKey].push(newTask);
-          saveData();
-          renderWeek();
-        };
-        dayDiv.appendChild(addBtn);
-
-        container.appendChild(dayDiv);
-      });
-    }
-
-    function createTaskElement(dayKey, idx, task) {
-      const taskWrapper = document.createElement('div');
-      taskWrapper.className = 'flex items-start gap-2 mb-2';
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = task.completed;
-      checkbox.onchange = () => {
-        task.completed = checkbox.checked;
-        saveData();
-        renderWeek();
-      };
-
-      const textInput = document.createElement('input');
-      textInput.value = task.text;
-      textInput.placeholder = 'Task description';
-      textInput.className = `border flex-1 p-1 rounded ${task.completed ? 'completed' : ''}`;
-      textInput.oninput = (e) => {
-        task.text = e.target.value;
-        saveData();
-      };
-
-      const tagSelect = document.createElement('select');
-      tagSelect.className = 'border p-1 rounded';
-      tagSelect.innerHTML = `<option value="">Tag</option>` + tags.map(t => `<option value="${t}" ${task.tags.includes(t) ? 'selected' : ''}>${t}</option>`).join('');
-      tagSelect.onchange = (e) => {
-        const selected = e.target.value;
-        if (selected && !task.tags.includes(selected)) {
-          task.tags.push(selected);
-        }
-        saveData();
-        renderWeek();
-      };
-
-      taskWrapper.appendChild(checkbox);
-      taskWrapper.appendChild(textInput);
-      taskWrapper.appendChild(tagSelect);
-
-      return taskWrapper;
-    }
-
-    document.getElementById('prevWeek').onclick = () => {
-      currentWeekOffset--;
-      renderWeek();
-    };
-
-    document.getElementById('nextWeek').onclick = () => {
-      currentWeekOffset++;
-      renderWeek();
-    };
-
-    document.getElementById('addTagBtn').onclick = () => {
-      const newTag = document.getElementById('newTagInput').value.trim();
-      if (newTag && !tags.includes(newTag)) {
-        tags.push(newTag);
-        document.getElementById('newTagInput').value = '';
-        saveData();
-        renderTags();
-      }
-    };
-
-    document.getElementById('toggleTheme').onclick = () => {
-      document.documentElement.classList.toggle('dark');
-    };
-
-    renderTags();
-    renderWeek();
-  </script>
+  <script src="focusweek.js"></script>
 </body>
 </html>
